@@ -1,0 +1,105 @@
+FETAL RECONSTRUCTION SOFTWARE
+Manual
+
+Maria Murgasova, University of Oxford, 17th January 2012
+
+The files
+---------
+
+The software is implemented within IRTK in package 'segmentation' (irtk/packages/segmentation).
+The reconstruction is performed by an object  'irtkReconstruction' implemented in files 
+'irtkReconstruction.cc' (in irtk/packages/segmentation/src) and 'irtkReconstruction.h'
+(in irtk/packages/segmentation/include). The command line executable is called 'reconstruction' 
+and is implemented in 'irtk/packages/segmentation/applications/reconstruction.cc'.
+
+The reconstruction software uses various objects in IRTK to handle images and 
+perform rigid registration. It requires special settings for parameters of rigid registration
+as we deal with thick slices. Therefore functions 'GuessParameterSliceToVolume()' and 
+'GuessParameterThickSlice()' were added to object 'irtkImageRigidRegistration' 
+(in irtk/packages/registration).
+
+The command
+-----------
+
+The executable 'reconstruction' is located in 'irtk/linux/bin'. The default usage is
+
+reconstruction name_of_reconstructed_volume.nii.gz number_of_stacks stack1.nii.gz ... stack_n.nii.gz id ... id -mask mask.nii.gz
+
+for example for three stacks it would be
+
+reconstruction reconstructed.nii.gz 3 stack1.nii.gz stack2.nii.gz stack3.nii.gz id id id -mask mask.nii.gz
+
+The stacks need to be roughly aligned. In ideal scenario their possition in the scanner is
+stored in nifti header and this should provide sifficient initial alignment. 'id' is 
+interpreted as identity transformation by the software. In case stacks are note aligned, 
+eg. there is no overlap of the fetal head or the rotation is more that 45 degrees, manual 
+pre-alignment is needed. This can be done using 'rview' (viewer of IRTK) and names 
+of the saved initial transformations can replace the 'id'. At least one 'id' is required 
+for a stack to be chosen as a template. In case there is more than one 'id', the first stack 
+with 'id' will be chosen. An example of running the reconstruction with manual initial
+transformations is:
+
+reconstruction reconstructed.nii.gz 3 stack1.nii.gz stack2.nii.gz stack3.nii.gz id trans2.dof.gz trans3.dof.gz -mask mask.nii.gz
+
+It is recomended that a mask is supplied to the algorithm. The mask can be manually segmented
+on a downsampled template stack, making it fast to create. The mask can be created using 
+segmentation tool in 'rview'. In case no mask is supplied, the whole template stack will be 
+considered as the region of interest.
+
+The mask is used to crop all the stack so that maternal tissue around the fetal head is not 
+stored. Additionally, the cropped stacks will be padded using this mask at the beginning of 
+the reconstruction. The reconstructed volume will be padded using this mask during 
+each motion-correction iteration.
+
+Running 'reconstruction' command without any arguments will give the list of parameters 
+which can be modified if necessary. The default parameters should produce good results 
+in most cases.
+
+The output
+----------
+The reconstructed volume will be saved at the end of the process using the name given as the 
+first argument. Additionally the program will save all the slices and final slice-to-volume 
+transformations. Final alignment can then be checked as follows (example for slice n. 137):
+
+rview slice137.nii.gz reconstructed.nii.gz transformation137.dof
+
+The program will also save four text files. The output from registration is
+directed from the screen to files 'log-registration.txt' and 'log-registration-error.txt'. 
+This is unmodified output of rigid registration as implemented in IRTK. 
+In 'log-reconstruction.txt' it is possible to observe the progress of the reconstruction 
+part of the algoritm. The file 'log-evaluation.txt' gives the list of included and excluded 
+slices in each motion-correction iteration.
+
+The debug mode
+--------------
+
+If flug '-debug' is used, the program will save a number of intermediate results and values 
+of reconstruction parameters will be written to 'log-reconstruction.txt'.
+The following intermediate results will be saved:
+
+Preprocessing:
+* maskTemplate.nii.gz - mask resampled to the space of template stack
+* croppedTemplate.nii.gz - template stack cropped according to the mask
+* mask.nii.gz - mask smoothed and resampled to the space of reconstructed volume 
+* target.nii.gz - padded and cropped template stack used as a target for volumetric registration
+* stack%i.nii.gz (i=1,...,n) - stacks used for volumetric registration (first whole and then cropped as the volumetric registration is re-run after cropping)
+* stack-transformation%i.dof.gz (i=1,...,n) volumetric transformations stack-to-template-stack transformation (again replaced after cropping)
+  --these can be checked as e.g.
+    rview target.nii.gz stack1.nii.gz stack-transformation1.dof.gz
+* parout-volume.rreg - parameters for volumetric rigid registration
+* cropped%i.nii.gz (i=1,...,n) - stacks saved right after cropping
+* mask%i.nii.gz - masks for each stack used for cropping
+* rescaled-stack%i.nii.gz (i=0,...,n) stacks after intensity matching (average intensity given as a parameter, default 700)
+
+Reconstruction:
+* PSF.nii.gz - point spread function used in last processed stack in current iteration
+* volume_weights.nii.gz - coverage of the volume by the slices in current iteration (value for a volume voxels gives a sum of contributions to this voxel from all the slices )
+* init.nii.gz - initial volume for current iteration created using Gausian weighted reconstruction
+* image%i.nii.gz - final reconstructed volume for iteration i
+
+Slice-to-volume registration:
+* parout-slice.rreg - parameters for rigid registration of slice to reconstructed volume
+
+
+
+
